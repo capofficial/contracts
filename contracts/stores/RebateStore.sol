@@ -88,6 +88,9 @@ contract RebateStore is Roles {
 		// amount added in USD
 		uint256 weightedAmount = usdAmount * feeBps / 100;
 		volumes[user] = getUserVolume(user) + weightedAmount; // decayed volume + amount
+
+		// update volumeLastChecked
+		volumeLastChecked[user] = block.timestamp;
 	}
 
 	// -- Getters -- //
