@@ -259,11 +259,12 @@ contract Positions is Roles {
 
 		uint256 amountToReturnToUser;
 
-		if (order.isReduceOnly) {
-			// order.margin = 0
-			// A fee (order.fee) corresponding to order.size was charged on submit. Only fee corresponding to executedOrderSize should be charged, rest should be returned, if any
-			amountToReturnToUser += order.fee * remainingOrderSize / order.size;
-		} else {
+		// if (order.isReduceOnly) {
+		// 	// order.margin = 0
+		// 	// A fee (order.fee) corresponding to order.size was charged on submit. Only fee corresponding to executedOrderSize should be charged, rest should be returned, if any
+		// 	amountToReturnToUser += order.fee * remainingOrderSize / order.size;
+		// } else {
+		if (!order.isReduceOnly) {
 			// User submitted order.margin when sending the order. Refund the portion of order.margin that executes against the position
 			uint256 executedOrderMargin = order.margin * executedOrderSize / order.size;
 			amountToReturnToUser += executedOrderMargin;
@@ -282,6 +283,9 @@ contract Positions is Roles {
 			originalFee, 
 			false
 		);
+
+		// If an order is reduce-only, fee is taken from the position's margin.
+		uint256 feeToPay = order.isReduceOnly ? feeWithRebate : 0;
 
 		// Funding update
 
@@ -332,8 +336,11 @@ contract Positions is Roles {
 				absPnl
 			);
 
-			if (absPnl < executedPositionMargin) {
-				amountToReturnToUser += executedPositionMargin - absPnl;
+			uint256 totalPnl = absPnl + feeToPay;
+
+			if (totalPnl < executedPositionMargin) {
+				// If an order is reduce-only, fee is taken from the position's margin as the order's margin is zero.
+				amountToReturnToUser += executedPositionMargin - totalPnl;
 			}
 
 		} else {	
@@ -343,7 +350,8 @@ contract Positions is Roles {
 				order.market, 
 				uint256(pnl)
 			);
-			amountToReturnToUser += executedPositionMargin;
+			// If an order is reduce-only, fee is taken from the position's margin as the order's margin is zero.
+			amountToReturnToUser += executedPositionMargin - feeToPay;
 		}
 
 		fundStore.transferOut(order.asset, order.user, amountToReturnToUser);
