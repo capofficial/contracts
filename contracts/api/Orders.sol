@@ -207,9 +207,16 @@ contract Orders is Roles {
 
 		// console.log(7);
 
+		uint256 originalFee = params.size * market.fee / BPS_DIVIDER;
+		uint256 feeRebateBps = rebateStore.getUserRebate(user);
+		uint256 referralRebateBps = referralStore.getRebateForUser(user);
+		uint256 feeWithRebate = originalFee * (BPS_DIVIDER - feeRebateBps - referralRebateBps) / BPS_DIVIDER;
+		uint256 valueConsumed;
+
 		if (params.isReduceOnly) {
 			params.margin = 0;
 			// Existing position is checked on execution so TP/SL can be submitted as reduce-only alongside a non-executed order
+			// In this case, valueConsumed is zero as margin is zero and fee is taken from the order's margin 
 		} else {
 			require(!marketStore.isGlobalReduceOnly(), "!global-reduce-only");
 			require(!market.isReduceOnly, "!market-reduce-only");
@@ -223,28 +230,20 @@ contract Orders is Roles {
 			// Check against max OI if it's not reduce-only. this is not completely fail safe as user can place many consecutive market orders of smaller size and get past the max OI limit here, because OI is not updated until oracle picks up the order. That is why maxOI is checked on processing as well, which is fail safe. This check is more of preemptive for user to not submit an order
 			riskStore.checkMaxOI(params.asset, params.market, params.size);
 			// console.log(72);
+
+			// Transfer fee and margin to store
+			valueConsumed = params.margin + feeWithRebate;
+
+			if (params.asset == address(0)) {
+				fundStore.transferIn{value: valueConsumed}(params.asset, user, valueConsumed);
+			} else {
+				fundStore.transferIn(params.asset, user, valueConsumed);
+			}
+
+			// console.log(73);
 		}
 
 		// console.log(8);
-
-		// Transfer fee and margin to store
-
-		uint256 originalFee = params.size * market.fee / BPS_DIVIDER;
-		uint256 feeRebateBps = rebateStore.getUserRebate(user);
-		uint256 referralRebateBps = referralStore.getRebateForUser(user);
-		uint256 feeWithRebate = originalFee * (BPS_DIVIDER - feeRebateBps - referralRebateBps) / BPS_DIVIDER;
-
-		uint256 valueConsumed = params.margin + feeWithRebate;
-
-		// console.log(9);
-
-		if (params.asset == address(0)) {
-			fundStore.transferIn{value: valueConsumed}(params.asset, user, valueConsumed);
-		} else {
-			fundStore.transferIn(params.asset, user, valueConsumed);
-		}
-
-		// console.log(10);
 
 		// Add order to store
 
@@ -254,7 +253,7 @@ contract Orders is Roles {
 
 		uint256 orderId = orderStore.add(params);
 
-		// console.log(11);
+		// console.log(9);
 
 		emit OrderCreated(
 			orderId,
